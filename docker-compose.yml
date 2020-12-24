@@ -1,0 +1,87 @@
+version: '3'
+
+volumes:
+  www-data:
+    driver: local-persist
+    driver_opts:
+      mountpoint: ${CONTAINERVOLUMES}/html
+  mariadb-data:
+    driver: local-persist
+    driver_opts:
+      mountpoint: ${CONTAINERVOLUMES}/mariadb
+  redis-data:
+    driver: local-persist
+    driver_opts:
+      mountpoint: ${CONTAINERVOLUMES}/redis
+
+services:
+#  sshd:
+#    image: hermsi/alpine-sshd
+#    container_name: ${COMPOSE_PROJECT_NAME}-SSH
+#    environment:
+#      ROOT_PASSWORD: ${ROOT_PASSWORD}
+#    ports:
+#      - "${SSH_PORT}:22"
+#    volumes:
+#      - www-data:/var/www/html
+
+  apache:
+    image: webdevops/php-apache:7.3-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-Apache-PHP
+    environment:
+      WEB_DOCUMENT_ROOT: /app/${COMPOSE_PROJECT_NAME}-Projekt
+      PHP_DISMOD:
+      PHP_DATE_TIMEZONE: ${TIMEZONE}
+      PHP_MAX_EXECUTION_TIME: 360
+      PHP_MEMORY_LIMIT: 756M
+      PHP_UPLOAD_MAX_FILESIZE: 64M
+      PHP_POST_MAX_SIZE: 64M
+    volumes:
+      - ./configs/php.ini:/opt/docker/etc/php/php.ini:ro
+      - ./configs/crontabs/root:/var/spool/cron/crontabs/root:ro
+      - www-data:/app
+    networks:
+      - default
+      - proxy
+
+    labels:
+      - traefik.enable=true
+      # Routers
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.rule=${HOSTRULE}
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.entrypoints=websecure
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.tls.certresolver=myresolver
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.service=${COMPOSE_PROJECT_NAME}_SVC
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.middlewares=${COMPOSE_PROJECT_NAME}_Header
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}_SVC.loadBalancer.server.port=80
+      - traefik.http.middlewares.${COMPOSE_PROJECT_NAME}_Header.headers.customrequestheaders.X-Forwarded-Proto=https
+      - traefik.http.middlewares.${COMPOSE_PROJECT_NAME}_Header.headers.customrequestheaders.X-Forwarded-Ssl=on
+      - traefik.http.middlewares.${COMPOSE_PROJECT_NAME}_Header.headers.customrequestheaders.X-Forwarded-Port=443
+      - traefik.docker.network=traefik_proxy
+
+  mysql:
+    image: mariadb:10.5
+    container_name: ${COMPOSE_PROJECT_NAME}-MariaDB
+    # command für mysql 8.x
+    # command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    # command für mariadb
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./configs/mariadb:/etc/mysql/conf.d
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MARIADB_DATABASE}
+      MYSQL_USER: ${MARIADB_USER}
+      MYSQL_PASSWORD: ${MARIADB_PASSWORD}
+      TZ: ${TIMEZONE}
+
+  redis:
+    image: redis:alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-Redis
+    volumes:
+      - redis-data:/data
+
+networks:
+  proxy:
+    external:
+      name: ${PROXY_NETWORK}
