@@ -13,6 +13,10 @@ volumes:
     driver: local-persist
     driver_opts:
       mountpoint: ${CONTAINERVOLUMES}/redis
+  backup-data:
+    driver: local-persist
+    driver_opts:
+      mountpoint: ${CONTAINERVOLUMES}/backup
 
 services:
 #  sshd:
@@ -26,20 +30,34 @@ services:
 #      - www-data:/var/www/html
 
   apache:
-    image: webdevops/php-apache:7.3-alpine
+    image: thecodingmachine/php:7.4-v4-apache
     container_name: ${COMPOSE_PROJECT_NAME}-Apache-PHP
     environment:
-      WEB_DOCUMENT_ROOT: /app/${COMPOSE_PROJECT_NAME}-Projekt
-      PHP_DISMOD:
-      PHP_DATE_TIMEZONE: ${TIMEZONE}
-      PHP_MAX_EXECUTION_TIME: 360
-      PHP_MEMORY_LIMIT: 756M
-      PHP_UPLOAD_MAX_FILESIZE: 64M
-      PHP_POST_MAX_SIZE: 64M
+      TZ: ${TIMEZONE}
+      APACHE_RUN_USER: docker
+      APACHE_RUN_GROUP: docker
+      PHP_EXTENSION_BCMATH: 1
+      PHP_EXTENSION_GD: 1
+      PHP_EXTENSION_GMP: 1
+      PHP_EXTENSION_IMAGICK: 1
+      PHP_EXTENSION_INTL: 1
+      PHP_EXTENSION_MYSQLI: 1
+      PHP_INI_DISPLAY_ERRORS: 0
+      PHP_INI_DATE_TIMEZONE: ${TIMEZONE}
+      PHP_INI_MAX_EXECUTION_TIME: 360
+      PHP_INI_MEMORY_LIMIT: 756M
+      PHP_INI_UPLOAD_MAX_FILESIZE: 64M
+      PHP_INI_POST_MAX_SIZE: 64M
+      APACHE_DOCUMENT_ROOT: /var/www/html/${COMPOSE_PROJECT_NAME}-Projekt
+      CRON_USER_1: docker
+      CRON_SCHEDULE_1: 0,5,10,15,20,25,30,35,40,45,50 * * * *
+      CRON_COMMAND_1: php /var/www/html/${COMPOSE_PROJECT_NAME}-Projekt/console core:archive
+      CRON_USER_2: root
+      CRON_SCHEDULE_2: 0 3 * * *
+      CRON_COMMAND_2: /backup/HTML-Backup.sh
     volumes:
-      - ./configs/php.ini:/opt/docker/etc/php/php.ini:ro
-      - ./configs/crontabs/root:/var/spool/cron/crontabs/root:ro
-      - www-data:/app
+      - www-data:/var/www/html
+      - backup-data:/backup
     networks:
       - default
       - proxy
@@ -74,6 +92,26 @@ services:
       MYSQL_USER: ${MARIADB_USER}
       MYSQL_PASSWORD: ${MARIADB_PASSWORD}
       TZ: ${TIMEZONE}
+
+  DBBackup:
+    image: fradelg/mysql-cron-backup
+    container_name: ${COMPOSE_PROJECT_NAME}-DBBackup
+    depends_on:
+      - mysql
+    volumes:
+      - backup-data:/backup
+    environment:
+      TZ: ${TIMEZONE}
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASS: ${MARIADB_ROOT_PASSWORD}
+      MAX_BACKUPS: 15
+      INIT_BACKUP: 0
+      # Every day at 03:00
+      CRON_TIME: 0 3 * * *
+      # Make it small
+      GZIP_LEVEL: 9
+    restart: unless-stopped
 
   redis:
     image: redis:alpine
