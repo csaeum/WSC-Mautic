@@ -4,7 +4,7 @@
 f1="/var/www/html"
 
 # Compress the folder with foldername + date and take backup
-filename="backup_`date +%d`_`date +%m`_`date +%Y`.tar.bz2";
+filename="backup_`date +%Y`_`date +%m`_`date +%d`-`date +%H`_`date +%m`.tar.bz2";
 
 # Create compressed file using tar and move to backup folder
 tar cfvj /backup/HTML/$filename $f1
@@ -12,10 +12,4 @@ tar cfvj /backup/HTML/$filename $f1
 # Move to Backup folder
 cd /backup/HTML
 
-find "/backupfolder" -type f -mtime +8 -exec rm {} \;
-
-# List the content
-ls
-
-# List the disk usage
-du -sh
+find "/backup/HTML" -type f -mtime +8 -exec rm {} \;
